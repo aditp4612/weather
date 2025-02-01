@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Weather App</title>
+</head>
+<body>
+    <h1>Weather App</h1>
+
+    <form id="weatherForm">
+        <label for="location">Enter Location (City or ZIP):</label>
+        <input type="text" id="location" name="location" required>
+
+        <label for="start_date">Start Date:</label>
+        <input type="date" id="start_date" name="start_date" required>
+
+        <label for="end_date">End Date:</label>
+        <input type="date" id="end_date" name="end_date" required>
+
+        <button type="submit">Get Weather</button>
+    </form>
+
+    <h2>Weather Result</h2>
+    <div id="weatherResult"></div>
+
+    <h2>Previous Records</h2>
+    <button onclick="fetchRecords()">Load Records</button>
+
+    <table border="1">
+        <thead>
+            <tr>
+                <th>Location</th>
+                <th>Start Date</th>
+                <th>End Date</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody id="recordsTable"></tbody>
+    </table>
+
+    <script>
+        document.getElementById('weatherForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+
+            const location = document.getElementById('location').value;
+            const startDate = document.getElementById('start_date').value;
+            const endDate = document.getElementById('end_date').value;
+            const resultDiv = document.getElementById('weatherResult');
+
+            resultDiv.textContent = 'Fetching weather...';
+
+            try {
+                const response = await fetch(`/weather?location=${encodeURIComponent(location)}&start_date=${encodeURIComponent(startDate)}&end_date=${encodeURIComponent(endDate)}`);
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    resultDiv.textContent = errorData.error || 'Error fetching weather.';
+                    return;
+                }
+
+                const data = await response.json();
+                let forecastHTML = `<h3>Weather for ${data.location}, ${data.country}</h3>`;
+
+                data.forecast.forEach(day => {
+                    forecastHTML += `
+                        <p><strong>Date:</strong> ${day.date}</p>
+                        <p>Temperature: ${day.temperature}</p>
+                        <p>Description: ${day.description}</p>
+                        <img src="${day.icon}" alt="Weather Icon">
+                        <hr>
+                    `;
+                });
+
+                resultDiv.innerHTML = forecastHTML;
+                fetchRecords(); // Reload records after fetching new weather
+            } catch (err) {
+                resultDiv.textContent = 'An error occurred. Please try again.';
+            }
+        });
+
+        async function fetchRecords() {
+            const recordsTable = document.getElementById('recordsTable');
+            recordsTable.innerHTML = 'Loading...';
+
+            try {
+                const response = await fetch('/weather_records');
+                const records = await response.json();
+                recordsTable.innerHTML = '';
+
+                records.forEach(record => {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td contenteditable="true" id="location-${record.id}">${record.location}</td>
+                        <td contenteditable="true" id="start-${record.id}">${record.start_date}</td>
+                        <td contenteditable="true" id="end-${record.id}">${record.end_date}</td>
+                        <td>
+                            <button onclick="updateRecord('${record.id}')">Update</button>
+                            <button onclick="deleteRecord('${record.id}')">Delete</button>
+                        </td>
+                    `;
+                    recordsTable.appendChild(tr);
+                });
+            } catch (err) {
+                recordsTable.innerHTML = 'Failed to fetch records.';
+            }
+        }
+
+        async function updateRecord(recordId) {
+            const updatedLocation = document.getElementById(`location-${recordId}`).textContent;
+            const updatedStart = document.getElementById(`start-${recordId}`).textContent;
+            const updatedEnd = document.getElementById(`end-${recordId}`).textContent;
+
+            const updates = {
+                location: updatedLocation,
+                start_date: updatedStart,
+                end_date: updatedEnd
+            };
+
+            try {
+                await fetch(`/update_weather/${recordId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(updates)
+                });
+                alert('Record updated successfully!');
+                fetchRecords();
+            } catch (err) {
+                alert('Failed to update record.');
+            }
+        }
+
+        async function deleteRecord(recordId) {
+            if (!confirm('Are you sure you want to delete this record?')) return;
+
+            try {
+                await fetch(`/delete_weather/${recordId}`, { method: 'DELETE' });
+                fetchRecords();
+            } catch (err) {
+                alert('Failed to delete record.');
+            }
+        }
+    </script>
+</body>
+</html>
